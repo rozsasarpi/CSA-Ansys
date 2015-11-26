@@ -1,0 +1,387 @@
+!simply supported steel-concrete composite I-girder, construction stages, t = 0
+!CS1 - bare steel, q1/2 load
+!CS2 - composite, t=0; q1 load
+!CS1 + CS2 combination
+
+
+FINISH
+/clear
+
+jobName = 'test_loadcomb_comp'
+
+/FILNAME, %jobName%
+/TITLE,   %jobName%
+
+![mm], [N]
+
+/PREP7
+
+!----------------------------------------------------
+!CONTROL
+
+!----------------------------------------------------
+!GEOMETRY
+
+LL = 10000	! span
+!slab
+ws = 800	! width of slab
+hs = 100	! height of slab
+
+!girder
+hg = 500	!height
+wg = 400	!width
+tg = 14		!thickness
+
+m1 = 50	! mesh size
+
+!----------------------------------------------------
+!MATERIAL PROP
+
+!steel
+Ea = 208000
+nua = 0.3
+alfa_a = 1.2e-5			! [1/°C]
+
+!concrete
+Ec = 34000
+nuc = 0.17
+
+!----------------------------------------------------
+!LOADING
+
+Q1 = 1e6	! N
+
+!----------------------------------------------------
+!ELEMENTS
+!slab
+ET,1,SHELL181
+R,1,hs,hs,hs,hs, , ,
+MPTEMP,,,,,,,,
+MPTEMP,1,0
+MPDATA,EX,1,,Ec                     
+MPDATA,PRXY,1,,nuc
+MPDATA, ALPX, 1, , alfa_a
+
+!girder
+ET,2,SHELL181
+R,2,tg,tg,tg,tg, , ,
+MPDATA,EX,2,,Ea                     
+MPDATA,PRXY,2,,nua
+MPDATA, ALPX, 2, , alfa_a
+
+!stud
+ET,99,MPC184,		!!!!This element cannot be used with the arc-length method
+KEYOPT,99,1,1		!(1) - RIGID 0 translation; 1 - full constrain
+KEYOPT,99,2,1		! Lagrange multiplier method - to get forces in the element - shear force
+
+!----------------------------------------------------
+!MODEL GENERATION
+
+K,1,	0,0,-ws/2
+K,2,	0,0,0
+K,3,	0,0,ws/2
+
+K,4,	0,-hs/2,-wg/2
+K,5,	0,-hs/2,0
+K,6,	0,-hs/2,wg/2
+K,7,	0,-hs/2-hg,-wg/2
+K,8,	0,-hs/2-hg,0
+K,9,	0,-hs/2-hg,wg/2
+
+K,11,	LL,0,-ws/2
+K,12,	LL,0,0
+K,13,	LL,0,ws/2
+
+K,14,	LL,-hs/2,-wg/2
+K,15,	LL,-hs/2,0
+K,16,	LL,-hs/2,wg/2
+K,17,	LL,-hs/2-hg,-wg/2
+K,18,	LL,-hs/2-hg,0
+K,19,	LL,-hs/2-hg,wg/2
+
+A,1,2,12,11
+A,2,3,13,12
+
+A,4,5,15,14
+A,5,6,16,15
+A,5,8,18,15
+A,7,8,18,17
+A,8,9,19,18
+
+!MESHING
+!slab
+ASEL,S,LOC,Y,0-1,0+1
+AATT,1,1,1
+!MSHKEY,1			! (1) mapped meshing; (0) free meshing
+MSHAPE,0,2D			! mesh shape def, quadrilateral elements(0) //triangle (1)//, 2D (area)
+AESIZE,ALL,m1
+AMESH,ALL
+
+CM,slab_e,ELEM
+CM,slab_a,AREA
+
+!girder
+ALLSEL,ALL
+CMSEL,u,slab_a
+
+AATT,2,2,2
+!MSHKEY,1			! (1) mapped meshing; (0) free meshing
+MSHAPE,0,2D			! mesh shape def, quadrilateral elements(0) //triangle (1)//, 2D (area)
+AESIZE,ALL,m1
+AMESH,ALL
+
+ALLSEL,ALL
+CMSEL,u,slab_e
+CM,girder_e,ELEM
+CM,girder_a,AREA
+
+!studs
+NSEL,S,LOC,Y,0-1,0+1
+NSEL,R,LOC,Z,0-1,0+1
+CM,studNode_slab,NODE
+
+NSEL,S,LOC,Y,-hs/2-1,-hs/2+1
+NSEL,R,LOC,Z,0-1,0+1
+CM,studNode_girder,NODE
+
+
+CMSEL,S,studNode_slab,NODE
+
+*GET, ii, NODE, 0, NUM, MIN
+
+*DOWHILE, ii
+
+	!slab node coordinates
+	*GET, iix, NODE, ii, LOC, X
+	*GET, iiy, NODE, ii, LOC, Y
+	*GET, iiz, NODE, ii, LOC, Z
+	ALLSEL, ALL
+
+	!girder top flange coordinates
+	jj = NODE(iix, iiy-hs/2, iiz)
+
+	!connector
+	*IF, ii, NE, jj, THEN
+		TYPE,99
+		E, ii, jj
+		!CERIG, ii, jj
+	*ENDIF
+
+	! Következõ node
+	CMSEL, S, studNode_slab,NODE
+	*GET, ii, NODE, ii, NXTH
+
+*ENDDO
+
+ESEL,S,TYPE,,99
+CM,studs,ELEM
+
+!BOUNDARY CONDITIONS
+NSEL,S,LOC,Y,-hs/2-hg-1,-hs/2-hg+1
+NSEL,R,LOC,X,0-1,0+1
+
+D,ALL,UZ,0
+D,ALL,UY,0
+D,ALL,UX,0
+
+NSEL,S,LOC,Y,-hs/2-hg-1,-hs/2-hg+1
+NSEL,R,LOC,X,LL-1,LL+1
+
+D,ALL,UZ,0
+D,ALL,UY,0
+
+!NUMMRG, ALL
+
+!LOADING
+
+ALLSEL, ALL
+CMSEL, S, studNode_slab,NODE
+*GET, num, NODE, 0, COUNT
+
+q1 = -Q1/num		!uniformly distributed load
+
+FINISH
+
+!----------------------------------------------------
+/SOLU
+
+ANTYPE,0
+NROPT,FULL	!N-R solution options - required because of EKILL\EALIVE
+
+
+!bare steel girder - q1/2 uniformly distributed load
+TIME,1
+	NSUBST, 1
+	OUTRES, ALL, ALL
+	OUTPR, ALL, ALL	
+	ALLSEL, ALL
+	FDELE, ALL, ALL
+	ALLSEL, ALL
+	
+	!structural model defintion/modificaton
+	!kills the slab (reduces its stiffness ~0)
+	CMSEL,S,slab_e,ELEM
+	!CMSEL,A,studs,ELEM
+	EKILL,ALL
+	
+	!load defintion/modificaton
+	CMSEL, S, studNode_girder,NODE
+	F,ALL,FY,q1/2
+	!CMSEL, S, studNode_slab,NODE
+	!F,ALL,FY,q1
+
+	ALLSEL,ALL
+
+SOLVE
+
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!DUMMY
+TIME,2	!dummy time-step to remove the loads previously applied on a different static model
+!(to ensure that different construction stages are stored separately -> easier to combine later)
+
+	NSUBST, 1
+	OUTRES, ALL, ALL
+	OUTPR, ALL, ALL	
+	ALLSEL, ALL
+	!remove the load applied in previous time step
+	FDELE, ALL, ALL
+	ALLSEL, ALL
+SOLVE
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+!composite girder - t = 0 -> E.c; q1 uniformly distributed load
+TIME,3
+	NSUBST, 1
+	OUTRES, ALL, ALL
+	OUTPR, ALL, ALL	
+	ALLSEL, ALL
+	!FDELE, ALL, ALL
+	
+	!structural model defintion/modificaton
+	!revives slab elements
+	CMSEL,S,slab_e,ELEM
+	!CMSEL,A,studs,ELEM
+	EALIVE,ALL
+	
+	ALLSEL, ALL
+	
+	!load defintion/modificaton
+	CMSEL, S, studNode_slab,NODE
+	!NSEL,R,LOC,X,LL/2-1,LL/2+1
+	F,ALL,FY,q1
+
+	ALLSEL,ALL
+
+SOLVE
+
+!temperature load
+TIME,4
+	NSUBST, 1
+	OUTRES, ALL, ALL
+	OUTPR, ALL, ALL	
+	ALLSEL, ALL
+	FDELE, ALL, ALL
+	
+	!structural model defintion/modificaton
+	!revives slab elements
+	CMSEL,S,slab_e,ELEM
+	dT = 10
+	BFE, ALL, TEMP, 1, dT, dT, dT, dT
+	BFE, ALL, TEMP, 5, dT, dT, dT, dT
+
+	ALLSEL,ALL
+
+SOLVE
+
+FINISH
+
+/POST1
+
+!Longitudinal shear force per length
+!³³³³³³³³³³³³³³³³³³³³³³³³³³³³³³³³³³³³³³³³³³³³³³³³³³³³³³³³³³³³
+!TIME step to read, analyse
+SET,,, ,,, ,4 
+
+CMSEL, S, studs, ELEM
+*GET, tot_num_stud, ELEM, 0, COUNT
+*GET, min_num_stud, ELEM, 0, NUM, MIN
+
+*DEL, stud_x
+*DIM, stud_x, ARRAY, tot_num_stud, 1
+
+*DEL, stud_x_ord
+*DIM, stud_x_ord, ARRAY, tot_num_stud, 1
+
+!gets the x coordinate of the stud elements (MPC184), the filling order follows that of the element numbering
+!looping through ENTNUM, the provided value serves as start -> inceasing by 1 succesively until the array is filled
+*VGET, stud_x(1), ELEM, min_num_stud, CENT, X, , ,0
+
+!sort the stud elements accoring to their X position from 0 to max
+*VFUN, stud_x_ord, ASORT, stud_x
+
+*DEL, stud_force
+*DIM,stud_force, ARRAY, tot_num_stud, 1
+
+!!gets the shear forces from MPC184 elements
+indicator = 0
+*DO, jj, 1, tot_num_stud, 1
+
+	CMSEL, S, studs, ELEM
+	ESEL, R , CENT,X, stud_x_ord(jj)-1, stud_x_ord(jj)+1
+	*GET, stud_i, ELEM, 0, NUM, MAX
+	*GET, stud_i_n, ELEM, 0, COUNT
+	*IF, stud_i_n, NE, 1, THEN
+	!	*MSG, ERROR, 'more_than_one__or_no_stud_selected'
+		indicator = 1
+	*ENDIF
+
+	*GET, stud_force(jj), ELEM, stud_i, SMISC, 6
+*ENDDO
+
+!save the results
+*MWRITE, stud_force, %jobName%_stud_force, txt, , jik
+(1000F10.3)
+
+*MWRITE, stud_x_ord, %jobName%_stud_x_ord, txt, , jik
+(1000F10.3)
+
+!*VGET is not working with SMISC or NMISC
+!SMISC is different for every element; for MPC 184:
+!SMISC,5 -> SFZ
+!SMISC,6 -> SFY
+!³³³³³³³³³³³³³³³³³³³³³³³³³³³³³³³³³³³³³³³³³³³³³³³³³³³³³³³³³³³³
+
+
+!Load combination
+LCZERO			! Zeroes the results portion of the database.
+
+LCDEF, 1, 1		! Creates a load case from a set of results on a results file.
+LCDEF, 2, 3
+
+LCFACT, 1, 1		! LCFACT, LCNO, FACT  Defines scale factors for load case operations
+LCFACT, 2, 1
+
+LCSEL, S, 1, 2		! Selects a subset of load cases.
+
+FORCE, STATIC
+SUMTYPE,COMP
+LCOPER,ADD,ALL		! Sums selected load cases
+
+!NSEL,S,LOC,X,LL/2-200,LL/2+200
+!ESLN,S
+ALLSEL,ALL
+
+PLNSOL, S, X, 0, 1
+/VIEW, 1, 1, 0, 1
+
+!contour coloring mod
+!/CONT,1,9,-600, ,300
+!/REPLOT 
+
+!*MSG, NOTE, 'well'
+
+FINISH
+
+
+
+
