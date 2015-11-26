@@ -5,6 +5,7 @@ Demonstrating the activation and deactivation of elements during analysis and su
 
 __Codes:__ Ansys APDL
 
+![alt text](composite.png "illustrative result")
 
 __Notes__  
 * simply supported steel-concrete composite I-girder, construction stages, t = 0
